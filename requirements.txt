@@ -1,2 +1,0 @@
-# requirements.txt
-# No dependencies required for this project

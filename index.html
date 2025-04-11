@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OK School Life - 网页终端版</title>
+    <!-- Pyodide 运行时 -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --input-bg: #2d2d2d;
+            --accent-color: #4CAF50;
+            --error-color: #ff5555;
+        }
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #terminal {
+            background-color: #121212;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            height: 60vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        #input-container {
+            display: flex;
+            margin-top: 10px;
+        }
+        #prompt {
+            color: var(--accent-color);
+            margin-right: 5px;
+            line-height: 40px;
+        }
+        #input {
+            flex-grow: 1;
+            background: var(--input-bg);
+            color: var(--text-color);
+            border: none;
+            padding: 10px;
+            font-family: inherit;
+            border-radius: 3px;
+        }
+        #status {
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .cmd-line {
+            margin: 5px 0;
+        }
+        .error {
+            color: var(--error-color);
+        }
+        .loading:after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        @media (max-width: 600px) {
+            #terminal {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>🎮 OK School Life</h1>
+        <div id="status" class="loading">初始化中</div>
+    </div>
+    
+    <div id="terminal"></div>
+    
+    <div id="input-container">
+        <div id="prompt">>></div>
+        <input type="text" id="input" placeholder="等待Pyodide加载完成..." disabled>
+    </div>
+
+    <script>
+        // 全局变量
+        const terminal = document.getElementById('terminal');
+        const input = document.getElementById('input');
+        const statusEl = document.getElementById('status');
+        let pyodide;
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        // 打印到终端
+        function print(text, isError = false) {
+            const line = document.createElement('div');
+            line.className = 'cmd-line' + (isError ? ' error' : '');
+            line.textContent = text;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // 更新状态栏
+        function updateStatus(text, isError = false) {
+            statusEl.textContent = text;
+            statusEl.className = isError ? 'error' : '';
+        }
+
+        // 初始化Pyodide
+        async function initPyodide() {
+            updateStatus('⏳ 加载Pyodide运行时...');
+            
+            try {
+                pyodide = await loadPyodide({
+                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/",
+                    stdout: (text) => print(text),
+                    stderr: (text) => print(text, true)
+                });
+                
+                updateStatus('🔍 加载游戏代码...');
+                const response = await fetch('ok_school_life.py');
+                if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
+                
+                const code = await response.text();
+                
+                // 重写Python的input()
+                pyodide.runPython(`
+                import sys
+                from js import document
+                def input(prompt=''):
+                    document.getElementById('terminal').innerHTML += '<div style="color:#4CAF50">' + prompt + '</div>'
+                    return __prompt_value
+                `);
+                
+                // 运行游戏代码
+                updateStatus('🚀 启动游戏...');
+                await pyodide.runPythonAsync(code);
+                
+                updateStatus('✅ 准备就绪 | 输入指令开始游戏');
+                input.disabled = false;
+                input.placeholder = "输入指令后按回车...";
+                input.focus();
+                
+                print('\n游戏已加载完成！', false);
+                print('--------------------------------', false);
+                
+            } catch (err) {
+                updateStatus(`❌ 初始化失败: ${err.message}`, true);
+                print(`初始化错误: ${err}`, true);
+                console.error(err);
+            }
+        }
+
+        // 处理用户输入
+        input.addEventListener('keydown', async (e) => {
+            // 上箭头调出历史命令
+            if (e.key === 'ArrowUp' && commandHistory.length > 0) {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                }
+                input.value = commandHistory[commandHistory.length - 1 - historyIndex];
+            }
+            // 下箭头调出较新命令
+            else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    input.value = commandHistory[commandHistory.length - 1 - historyIndex];
+                } else {
+                    historyIndex = -1;
+                    input.value = '';
+                }
+            }
+            // 回车执行命令
+            else if (e.key === 'Enter') {
+                const cmd = input.value.trim();
+                if (cmd) {
+                    print(`>>> ${cmd}`, false);
+                    commandHistory.push(cmd);
+                    historyIndex = -1;
+                    
+                    try {
+                        pyodide.globals.set('__prompt_value', cmd);
+                        await pyodide.runPythonAsync(`_ = input()`);
+                    } catch (err) {
+                        print(`执行错误: ${err}`, true);
+                    }
+                }
+                input.value = '';
+            }
+        });
+
+        // 页面加载完成后启动
+        window.addEventListener('load', () => {
+            print('OK School Life - 网页终端版\n', false);
+            print('--------------------------------', false);
+            initPyodide();
+        });
+    </script>
+</body>
+</html>

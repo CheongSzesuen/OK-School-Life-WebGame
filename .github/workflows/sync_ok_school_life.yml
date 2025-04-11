@@ -1,0 +1,58 @@
+name: Sync ok_school_life.py from Upstream
+
+on:
+  schedule:
+    # 每10分钟检查一次上游更新（可根据需求调整频率）
+    - cron: '*/10 * * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sync-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout your repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整commit历史
+
+      - name: Add upstream repository
+        run: |
+          git remote add upstream https://github.com/still-alive-hhz/OK-School-Life.git || true
+          git fetch upstream
+
+      - name: Check if ok_school_life.py has changed
+        id: check-file
+        run: |
+          # 检查根目录下的ok_school_life.py是否有变动
+          if ! git diff --quiet HEAD upstream/main -- ok_school_life.py; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "new_hash=$(git rev-parse upstream/main:ok_school_life.py)" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync file if changed
+        if: steps.check-file.outputs.changed == 'true'
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          # 同步根目录下的文件
+          git checkout upstream/main -- ok_school_life.py
+          
+          # 提交变更
+          git add ok_school_life.py
+          git commit -m "AutoSync: Update ok_school_life.py from upstream (${steps.check-file.outputs.new_hash})"
+          git push origin main
+
+      - name: Notify on update (可选)
+        if: steps.check-file.outputs.changed == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.payload.workflow_run.pull_requests[0]?.number || 1,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "✅ 已自动同步上游文件: ok_school_life.py\n\n最新提交哈希: ${steps.check-file.outputs.new_hash}"
+            })
