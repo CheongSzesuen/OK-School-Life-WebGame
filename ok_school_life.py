@@ -66,8 +66,39 @@ achievements = []
 last_event = None
 rd_30_consequence = None
 
+<<<<<<< Updated upstream
 # 游戏开始函数
 def start():
+=======
+<<<<<<< HEAD
+
+def start():
+    show_menu('main')
+    return True
+
+def show_menu(menu_type):
+    if menu_type == 'main':
+        print("欢迎来到OK School Life beta v0.2.7！")
+        print("你将经历不同的事件和选择，看看你的学校生活会如何发展。")
+        print("按'1'以开始游戏，按'2'以退出：")
+    return menu_type
+
+def handle_input(user_input):
+    if user_input == '1':
+        print("游戏开始！")
+        return True
+    elif user_input == '2':
+        print("游戏结束")
+        return False
+    else:
+        print("无效的输入，请重新输入")
+        show_menu('main')
+        return True
+def main():    
+=======
+# 游戏开始函数
+def start():
+>>>>>>> Stashed changes
     print(f"欢迎来到OK School Life beta {version}！")
     print("你将经历不同的事件和选择，看看你的学校生活会如何发展。")
     tostart = input("按“1”以开始游戏，按“2”以退出：")
@@ -88,6 +119,10 @@ def start():
 
 # 主函数
 def main():   
+<<<<<<< Updated upstream
+=======
+>>>>>>> 901143114ee52e59c64f8c8f8b9a193df5b05525
+>>>>>>> Stashed changes
     start_event = random.choices(event_list, weights=[0.2, 0.5, 0.3])[0]
     print(f"{start_event}。\n你中考考得很好，现在可以选择学校。")
     print("1.羊县中学")

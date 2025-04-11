@@ -6,7 +6,6 @@
     <title>OK School Life - 网页终端版</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
     <style>
-        /* 保持之前的样式不变 */
         :root {
             --bg-color: #1a1a1a;
             --text-color: #e0e0e0;
@@ -23,33 +22,56 @@
             padding: 20px;
             line-height: 1.5;
         }
-        /* 其他样式保持不变... */
+        #terminal {
+            background-color: #121212;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            height: 60vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        #input-container {
+            display: flex;
+            margin-top: 10px;
+        }
+        #prompt {
+            color: var(--accent-color);
+            margin-right: 5px;
+            line-height: 40px;
+        }
+        #input {
+            flex-grow: 1;
+            background: var(--input-bg);
+            color: var(--text-color);
+            border: none;
+            padding: 10px;
+            font-family: inherit;
+            border-radius: 3px;
+        }
+        .cmd-line {
+            margin: 5px 0;
+        }
+        .error {
+            color: var(--error-color);
+        }
     </style>
 </head>
 <body>
-    <div id="header">
-        <h1>🎮 OK School Life</h1>
-        <div id="status" class="loading">初始化中</div>
-    </div>
-    
+    <h1>🎮 OK School Life</h1>
     <div id="terminal"></div>
     
     <div id="input-container">
         <div id="prompt">>></div>
-        <input type="text" id="input" placeholder="等待Pyodide加载完成..." disabled>
+        <input type="text" id="input" placeholder="等待初始化完成..." disabled>
     </div>
 
     <script>
-        // 全局变量
         const terminal = document.getElementById('terminal');
         const input = document.getElementById('input');
-        const statusEl = document.getElementById('status');
         let pyodide;
-        let commandHistory = [];
-        let historyIndex = -1;
-        let inputResolver = null;  // 关键修复：用于处理输入等待
+        let gameRunning = false;
 
-        // 打印到终端
         function print(text, isError = false) {
             const line = document.createElement('div');
             line.className = 'cmd-line' + (isError ? ' error' : '');
@@ -58,15 +80,8 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        // 更新状态栏
-        function updateStatus(text, isError = false) {
-            statusEl.textContent = text;
-            statusEl.className = isError ? 'error' : '';
-        }
-
-        // 初始化Pyodide
         async function initPyodide() {
-            updateStatus('⏳ 加载Pyodide运行时...');
+            print("🚀 正在初始化Pyodide...");
             
             try {
                 pyodide = await loadPyodide({
@@ -74,107 +89,86 @@
                     stdout: (text) => print(text),
                     stderr: (text) => print(text, true)
                 });
-                
-                // 关键修复：更健壮的input()重写
+
+                // 修改游戏主循环逻辑
                 await pyodide.runPythonAsync(`
                 import sys
-                import asyncio
-                from js import document, console
-                
-                class WebInput:
-                    def __init__(self):
-                        self.buffer = ""
-                        self.event = asyncio.Event()
-                    
-                    async def input(self, prompt=""):
-                        document.getElementById('terminal').innerHTML += f'<div style="color:#4CAF50">{prompt}</div>'
-                        self.event.clear()
-                        await self.event.wait()
-                        return self.buffer
-                
-                web_input = WebInput()
-                sys.stdin = web_input
-                input = web_input.input
+                from js import document
+
+                game_state = {
+                    'running': True,
+                    'current_menu': 'main'
+                }
+
+                def show_menu(menu_type):
+                    if menu_type == 'main':
+                        print("欢迎来到OK School Life beta v0.2.7！")
+                        print("你将经历不同的事件和选择，看看你的学校生活会如何发展。")
+                        print("按'1'以开始游戏，按'2'以退出：")
+                    return menu_type
+
+                def handle_input(user_input):
+                    if game_state['current_menu'] == 'main':
+                        if user_input == '1':
+                            game_state['current_menu'] = 'game'
+                            print("游戏开始！")
+                        elif user_input == '2':
+                            game_state['running'] = False
+                            print("游戏结束")
+                        else:
+                            print("无效的输入，请重新输入")
+                            show_menu('main')
+                    return game_state['running']
                 `);
-                
-                // 将Python输入回调绑定到JS
-                pyodide.globals.set('handleUserInput', (value) => {
-                    pyodide.runPythonAsync(`
-                    web_input.buffer = ${JSON.stringify(value)}
-                    web_input.event.set()
-                    `);
-                });
-                
-                updateStatus('🔍 加载游戏代码...');
+
+                // 加载游戏代码（已修改递归问题）
                 const response = await fetch('ok_school_life.py');
-                if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
-                
                 const code = await response.text();
-                updateStatus('🚀 启动游戏...');
                 
-                // 运行游戏代码（在微任务中避免阻塞）
-                setTimeout(async () => {
-                    try {
-                        await pyodide.runPythonAsync(code);
-                        updateStatus('✅ 准备就绪 | 输入指令开始游戏');
-                        print('\n游戏已加载完成！输入 "1" 开始游戏', false);
-                    } catch (err) {
-                        updateStatus(`❌ 游戏启动失败`, true);
-                        print(`游戏运行错误: ${err}`, true);
-                        console.error(err);
-                    }
-                }, 0);
+                // 替换原游戏主循环
+                const fixedCode = code.replace(
+                    /def start\(.*?\).*?while True:/s,
+                    `def start():
+                        show_menu('main')
+                        return True`
+                );
                 
+                await pyodide.runPythonAsync(fixedCode);
+                gameRunning = true;
                 input.disabled = false;
                 input.placeholder = "输入指令后按回车...";
                 input.focus();
                 
             } catch (err) {
-                updateStatus(`❌ 初始化失败`, true);
-                print(`初始化错误: ${err}`, true);
+                print(`初始化失败: ${err}`, true);
                 console.error(err);
             }
         }
 
-        // 处理用户输入
-        input.addEventListener('keydown', async (e) => {
-            if (e.key === 'ArrowUp' && commandHistory.length > 0) {
-                e.preventDefault();
-                if (historyIndex < commandHistory.length - 1) {
-                    historyIndex++;
-                }
-                input.value = commandHistory[commandHistory.length - 1 - historyIndex];
-            }
-            else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (historyIndex > 0) {
-                    historyIndex--;
-                    input.value = commandHistory[commandHistory.length - 1 - historyIndex];
-                } else {
-                    historyIndex = -1;
-                    input.value = '';
-                }
-            }
-            else if (e.key === 'Enter') {
+        input.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter' && gameRunning) {
                 const cmd = input.value.trim();
-                if (cmd) {
-                    print(`>>> ${cmd}`, false);
-                    commandHistory.push(cmd);
-                    historyIndex = -1;
+                input.value = '';
+                print(`>> ${cmd}`);
+                
+                try {
+                    const shouldContinue = await pyodide.runPythonAsync(`
+                    handle_input(${JSON.stringify(cmd)})
+                    `);
                     
-                    // 关键修复：通过注册的回调传递输入
-                    pyodide.globals.get('handleUserInput')(cmd);
-                    input.value = '';
+                    if (!shouldContinue) {
+                        gameRunning = false;
+                        input.disabled = true;
+                        print("感谢游玩！刷新页面可重新开始");
+                    }
+                } catch (err) {
+                    print(`执行错误: ${err}`, true);
                 }
             }
         });
 
-        // 页面加载完成后启动
-        window.addEventListener('load', () => {
-            print('OK School Life - 网页终端版\n', false);
-            print('--------------------------------', false);
-            initPyodide();
-        });
+        // 启动
+        initPyodide();
     </script>
 </body>
 </html>
