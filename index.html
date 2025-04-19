@@ -38,70 +38,21 @@
     </style>
 </head>
 <body>
-    <h1 class="system">OK校园生活</h1>
+    <h1>OK校园生活</h1>
     <div id="terminal"></div>
-    <input type="text" id="input" placeholder="初始化中..." disabled>
+    <input type="text" id="input" placeholder="输入选项..." disabled>
 
     <script>
         let pyodide;
-        let inputQueue = [];
-        
         async function initialize() {
-            // 初始化Pyodide
-            pyodide = await loadPyodide({
-                indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/",
-                stdout: text => appendOutput(text),
-                stderr: text => appendOutput(text, true)
-            });
-
-            // 注册Python输入函数
-            pyodide.registerJsModule("webio", {
-                inputHandler: (prompt) => {
-                    return new Promise(resolve => {
-                        const handler = (e) => {
-                            if (e.key === "Enter") {
-                                const value = e.target.value.trim();
-                                if (value) {
-                                    document.removeEventListener("keydown", handler);
-                                    e.target.value = "";
-                                    resolve(value);
-                                }
-                            }
-                        };
-                        document.getElementById("input").addEventListener("keydown", handler);
-                    });
-                }
-            });
-
-            // 加载游戏代码
+            pyodide = await loadPyodide();
             const response = await fetch('game_core.py');
             const code = await response.text();
             await pyodide.runPythonAsync(code);
-            
-            // 启用输入
             document.getElementById("input").disabled = false;
-            document.getElementById("input").placeholder = "输入选项...";
         }
 
-        function appendOutput(text, isError = false) {
-            const terminal = document.getElementById("terminal");
-            const line = document.createElement("div");
-            line.className = isError ? "error" : "";
-            line.textContent = text;
-            
-            // 特殊格式处理
-            if (text.includes("成就：")) line.classList.add("achievement");
-            if (text.startsWith("===")) line.classList.add("system");
-            
-            terminal.appendChild(line);
-            terminal.scrollTop = terminal.scrollHeight;
-        }
-
-        // 启动初始化
-        initialize().catch(err => {
-            appendOutput(`初始化失败: ${err.message}`, true);
-            console.error(err);
-        });
+        initialize().catch(err => console.error(err));
     </script>
 </body>
 </html>

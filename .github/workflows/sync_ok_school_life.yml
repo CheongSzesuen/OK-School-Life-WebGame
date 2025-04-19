@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '*/10 * * * *'  # 每10分钟检查一次
   workflow_dispatch:  # 允许手动触发
+  push:
+    branches:
+      - main
 
 jobs:
   sync-file:
@@ -41,3 +44,26 @@ jobs:
           git add ok_school_life.py
           git commit -m "$COMMIT_MSG"
           git push origin main
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and deploy
+        run: |
+          mkdir dist
+          cp index.html dist/
+          cp game_core.py dist/
+          echo "Deploying to GitHub Pages..."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
